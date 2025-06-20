@@ -9,6 +9,12 @@ phases:
       - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
       - IMAGE_TAG=${COMMIT_HASH:=latest}
       - cd $CODEBUILD_SRC_DIR
+      - echo "Obtendo credenciais do RDS..."
+      - export RDS_SECRET=$(aws secretsmanager get-secret-value --secret-id bia/hom/rds-secret --region us-east-1 | jq -r '.SecretString')
+      - export DB_USER=$(echo $RDS_SECRET | jq -r '.postgres')  # Note que usamos '.postgres' aqui
+      - export DB_PASS=$(echo $RDS_SECRET | jq -r '.password')
+      - export DB_HOST=bia2.cedew2g0o18b.us-east-1.rds.amazonaws.com
+      - export DB_NAME=bia_prod  # Ou obtenha do secret se disponível
 
   build:
     commands:
