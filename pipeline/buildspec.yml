@@ -18,7 +18,7 @@ phases:
 
   post_build:
     commands:
-      - echo "Enviando imagem para o ECR..."
+      - echo "Enviando imagem para ECR..."
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - echo "Gerando artefato para o ECS..."
