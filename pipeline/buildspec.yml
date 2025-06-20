@@ -5,9 +5,8 @@ phases:
     runtime-versions:
       nodejs: 18
     commands:
-      - echo "Instalando jq para processamento de JSON..."
-      - curl -sSL https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 -o /usr/local/bin/jq
-      - chmod +x /usr/local/bin/jq
+      - echo "Instalando dependências de sistema..."
+      - apt-get update -y && apt-get install -y jq
 
   pre_build:
     commands:
@@ -18,28 +17,30 @@ phases:
       - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
       - IMAGE_TAG=${COMMIT_HASH:=latest}
 
-      # Obter credenciais do RDS
+      # Obter credenciais do RDS apenas do Secrets Manager
       - echo "Obtendo segredos do RDS..."
       - export RDS_SECRET=$(aws secretsmanager get-secret-value --secret-id bia/hom/rds-secret --region us-east-1 | jq -r '.SecretString')
       - export DB_USER=$(echo $RDS_SECRET | jq -r '.username')
       - export DB_PASS=$(echo $RDS_SECRET | jq -r '.password')
       - export DB_HOST=bia2.cedew2g0o18b.us-east-1.rds.amazonaws.com
       - export DB_PORT=5432
+      - export DB_NAME=$(echo $RDS_SECRET | jq -r '.dbname || .dbName || "bia_prod"') # Fallback seguro
 
-      # Configurações adicionais
+      # Variáveis de ambiente obrigatórias
       - export NODE_ENV=production
       - cd $CODEBUILD_SRC_DIR
 
   build:
     commands:
-      # Build e migrações
+      # Build da imagem Docker
       - echo "Construindo imagem Docker..."
-      - docker build --no-cache -t $REPOSITORY_URI:latest .
+      - docker build -t $REPOSITORY_URI:latest .
       - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
 
-      # Verificar se o container funciona
-      - echo "Testando migrações..."
-      - docker run --rm $REPOSITORY_URI:latest npx sequelize db:migrate --env production
+      # Verificação prévia das migrações
+      - echo "Verificando configuração do banco..."
+      - docker run --rm -e DB_HOST -e DB_PORT -e DB_USER -e DB_PASS -e DB_NAME $REPOSITORY_URI:latest \
+        npx sequelize db:migrate:status --env production
 
   post_build:
     commands:
@@ -48,23 +49,14 @@ phases:
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
 
-      # Preparar artefatos para ECS
-      - echo "Gerando definições de serviço..."
+      # Artefatos para ECS
+      - echo "Gerando definições de serviço ECS..."
       - mkdir -p pipeline
       - printf '[{"name":"bia","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > pipeline/imagedefinitions.json
+      - echo "Conteúdo do arquivo de definição:"
       - cat pipeline/imagedefinitions.json
-
-      # Debug opcional
-      - codebuild-breakpoint
 
 artifacts:
   files:
     - pipeline/imagedefinitions.json
   base-directory: $CODEBUILD_SRC_DIR
-
-env:
-  variables:
-    NODE_ENV: production
-    AWS_REGION: us-east-1
-  parameter-store:
-    DB_NAME: "/bia/hom/db-name"  # Exemplo usando Parameter Store
