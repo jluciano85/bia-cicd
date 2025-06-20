@@ -36,10 +36,13 @@ async function getConfig() {
     const secrets = await getSecrets(secretsManagerClient);
 
     if(secrets) {
+      console.log("DEBUG: Secrets recebidos:", secrets);
+
       // Ajuste para o formato do seu secret
-      dbConfig.username = secrets.postgres || secrets.username;  // Usa 'postgres' como chave primária
+      dbConfig.username = secrets.username;
       dbConfig.password = secrets.password;
       dbConfig.host = secrets.host || process.env.DB_HOST || "bia2.cedew2g0o18b.us-east-1.rds.amazonaws.com";
+      dbConfig.port = parseInt(secrets.port || "5432", 10);  // Conversão segura para número
       dbConfig.database = secrets.dbname || secrets.database || "bia_prod";
 
       await imprimirSecrets(secrets);
