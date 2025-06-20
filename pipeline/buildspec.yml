@@ -21,13 +21,15 @@ phases:
       - echo "Enviando imagem para o ECR..."
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
+
       - echo "Gerando artefato para o ECS..."
       - mkdir -p pipeline
       - printf '[{"name":"bia","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > pipeline/imagedefinitions.json
       - ls -la pipeline/imagedefinitions.json  # Debug: verifica se o arquivo foi criado
-      - codebuild-breakpoint  # Remova temporariamente para testar o fluxo completo
+
+      - codebuild-breakpoint  # Pode comentar isso se quiser que o pipeline finalize direto
 
 artifacts:
   files:
     - pipeline/imagedefinitions.json
-  base-directory: $CODEBUILD_SRC_DIR
+  base-directory: pipeline
