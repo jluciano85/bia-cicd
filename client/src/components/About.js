@@ -4,8 +4,8 @@ import DadosHenrylle from "./DadosHenrylle";
 const About = () => {
   return (
     <div>
-      <h4>Versão 2.1.0</h4>
-      <h5>BIA 18 a 24 de Março/2024</h5>
+      <h4>Versão 3.2.0</h4>
+      <h5>BIA 31/03 a 06/04/2025</h5>
       <Link to="/">Voltar</Link>
       <DadosHenrylle />
     </div>
