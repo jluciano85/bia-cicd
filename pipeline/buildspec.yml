@@ -3,33 +3,54 @@ version: 0.2
 phases:
   pre_build:
     commands:
+      # Configuração do ECR
       - echo "Validando acesso ao ECR..."
       - REPOSITORY_URI=039612859546.dkr.ecr.us-east-1.amazonaws.com/bia
       - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $REPOSITORY_URI
       - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
       - IMAGE_TAG=${COMMIT_HASH:=latest}
+      
+      # Obter credenciais do RDS do Secrets Manager
+      - echo "Obtendo credenciais do RDS..."
+      - export RDS_SECRET=$(aws secretsmanager get-secret-value --secret-id bia/hom/rds-secret --region us-east-1 | jq -r '.SecretString')
+      - export DB_USER=$(echo $RDS_SECRET | jq -r '.username')
+      - export DB_PASS=$(echo $RDS_SECRET | jq -r '.password')
+      - export DB_HOST=bia2.cedew2g0o18b.us-east-1.rds.amazonaws.com
+      - export DB_PORT=5432
+      
       - cd $CODEBUILD_SRC_DIR
 
   build:
     commands:
+      # Build da imagem Docker
       - echo "Construindo imagem Docker..."
       - docker build -t $REPOSITORY_URI:latest .
       - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+      
+      # Executar migrações no RDS
+      - echo "Executando migrações no RDS..."
+      - npx sequelize-cli db:migrate --env production --config config/database.js
 
   post_build:
     commands:
+      # Push para ECR
       - echo "Enviando imagem para o ECR..."
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
-
+      
+      # Preparar artefatos para ECS
       - echo "Gerando artefato para o ECS..."
       - mkdir -p pipeline
       - printf '[{"name":"bia","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > pipeline/imagedefinitions.json
-      - ls -la pipeline/imagedefinitions.json  # Debug: verifica se o arquivo foi criado
-
-      - codebuild-breakpoint  # Pode comentar isso se quiser que o pipeline finalize direto
+      - ls -la pipeline/imagedefinitions.json
+      
+      - codebuild-breakpoint  # Manter se necessário para debug
 
 artifacts:
   files:
     - pipeline/imagedefinitions.json
-  base-directory: pipeline
+  base-directory: $CODEBUILD_SRC_DIR
+
+env:
+  variables:
+    NODE_ENV: production

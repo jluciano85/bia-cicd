@@ -10,6 +10,8 @@ COPY package*.json ./
 
 RUN npm install --loglevel=error
 
+RUN npm install -g sequelize-cli pg
+
 COPY . .
 
 RUN NODE_OPTIONS=--openssl-legacy-provider REACT_APP_API_URL=http://34.239.240.133 SKIP_PREFLIGHT_CHECK=true npm run build --prefix client
