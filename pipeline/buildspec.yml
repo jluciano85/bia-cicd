@@ -1,50 +1,61 @@
 version: 0.2
 
 phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+    commands:
+      - echo "Instalando jq para processamento de JSON..."
+      - curl -sSL https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 -o /usr/local/bin/jq
+      - chmod +x /usr/local/bin/jq
+
   pre_build:
     commands:
       # Configuração do ECR
-      - echo "Validando acesso ao ECR..."
+      - echo "Configurando acesso ao ECR..."
       - REPOSITORY_URI=039612859546.dkr.ecr.us-east-1.amazonaws.com/bia
       - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $REPOSITORY_URI
       - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
       - IMAGE_TAG=${COMMIT_HASH:=latest}
-      
-      # Obter credenciais do RDS do Secrets Manager
-      - echo "Obtendo credenciais do RDS..."
+
+      # Obter credenciais do RDS
+      - echo "Obtendo segredos do RDS..."
       - export RDS_SECRET=$(aws secretsmanager get-secret-value --secret-id bia/hom/rds-secret --region us-east-1 | jq -r '.SecretString')
       - export DB_USER=$(echo $RDS_SECRET | jq -r '.username')
       - export DB_PASS=$(echo $RDS_SECRET | jq -r '.password')
       - export DB_HOST=bia2.cedew2g0o18b.us-east-1.rds.amazonaws.com
       - export DB_PORT=5432
-      
+
+      # Configurações adicionais
+      - export NODE_ENV=production
       - cd $CODEBUILD_SRC_DIR
 
   build:
     commands:
-      # Build da imagem Docker
+      # Build e migrações
       - echo "Construindo imagem Docker..."
-      - docker build -t $REPOSITORY_URI:latest .
+      - docker build --no-cache -t $REPOSITORY_URI:latest .
       - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
-      
-      # Executar migrações no RDS
-      - echo "Executando migrações no RDS..."
-      - npx sequelize-cli db:migrate --env production --config config/database.js
+
+      # Verificar se o container funciona
+      - echo "Testando migrações..."
+      - docker run --rm $REPOSITORY_URI:latest npx sequelize db:migrate --env production
 
   post_build:
     commands:
       # Push para ECR
-      - echo "Enviando imagem para o ECR..."
+      - echo "Enviando imagens para o ECR..."
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
-      
+
       # Preparar artefatos para ECS
-      - echo "Gerando artefato para o ECS..."
+      - echo "Gerando definições de serviço..."
       - mkdir -p pipeline
       - printf '[{"name":"bia","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > pipeline/imagedefinitions.json
-      - ls -la pipeline/imagedefinitions.json
-      
-      - codebuild-breakpoint  # Manter se necessário para debug
+      - cat pipeline/imagedefinitions.json
+
+      # Debug opcional
+      - codebuild-breakpoint
 
 artifacts:
   files:
@@ -54,3 +65,6 @@ artifacts:
 env:
   variables:
     NODE_ENV: production
+    AWS_REGION: us-east-1
+  parameter-store:
+    DB_NAME: "/bia/hom/db-name"  # Exemplo usando Parameter Store
