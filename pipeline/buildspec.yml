@@ -3,37 +3,31 @@ version: 0.2
 phases:
   pre_build:
     commands:
-      - echo "Fazendo login no ECR..."
-      - aws --version
-      - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 310189683227.dkr.ecr.us-east-1.amazonaws.com
-      - REPOSITORY_URI=310189683227.dkr.ecr.us-east-1.amazonaws.com/bia
+      - echo "Validando acesso ao ECR..."
+      - REPOSITORY_URI=039612859546.dkr.ecr.us-east-1.amazonaws.com/bia
+      - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $REPOSITORY_URI
       - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
       - IMAGE_TAG=${COMMIT_HASH:=latest}
-      
-      # Navega para a raiz do projeto (onde está o Dockerfile)
       - cd $CODEBUILD_SRC_DIR
 
   build:
     commands:
-      - echo "Build iniciado em `date`"
-      - echo "Gerando imagem da BIA..."
+      - echo "Construindo imagem Docker..."
       - docker build -t $REPOSITORY_URI:latest .
       - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
 
   post_build:
     commands:
-      - echo "Build finalizado com sucesso em `date`"
-      - echo "Fazendo push da imagem para o ECR..."
+      - echo "Enviando imagem para o ECR..."
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
-      - echo "Gerando artefato da imagem para o ECS..."
-      
-      # Cria a pasta pipeline se não existir e gera o arquivo
+      - echo "Gerando artefato para o ECS..."
       - mkdir -p pipeline
-      - printf '[{"name":"bia","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > $CODEBUILD_SRC_DIR/pipeline/imagedefinitions.json
-      - codebuild-breakpoint
+      - printf '[{"name":"bia","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > pipeline/imagedefinitions.json
+      - ls -la pipeline/imagedefinitions.json  # Debug: verifica se o arquivo foi criado
+      # - codebuild-breakpoint  # Remova temporariamente para testar o fluxo completo
 
 artifacts:
   files:
     - pipeline/imagedefinitions.json
-  base-directory: $CODEBUILD_SRC_DIR  # Especifica o diretório base para os artefatos
+  base-directory: $CODEBUILD_SRC_DIR
