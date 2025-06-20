@@ -25,7 +25,7 @@ phases:
       - mkdir -p pipeline
       - printf '[{"name":"bia","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > pipeline/imagedefinitions.json
       - ls -la pipeline/imagedefinitions.json  # Debug: verifica se o arquivo foi criado
-      # - codebuild-breakpoint  # Remova temporariamente para testar o fluxo completo
+      - codebuild-breakpoint  # Remova temporariamente para testar o fluxo completo
 
 artifacts:
   files:
